@@ -42,7 +42,7 @@ def send_email(to_email, report_content):
 def analyze_data(df):
     data_str = df.head(50).to_string()
     prompt = f"作为小红书运营专家，请分析这份数据（前50条）：\n{data_str}\n请给出：1.账号现状诊断 2.爆款标题规律 3.三条改进建议。使用Markdown格式。"
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-pro')
     return model.generate_content(prompt).text
 
 # --- 页面 UI ---
