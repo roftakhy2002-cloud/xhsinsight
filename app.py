@@ -79,7 +79,7 @@ def analyze_data(df):
     
     # --- 关键修改：使用你列表里确认可用的 Gemini 2.0 模型 ---
     # 这是根据你刚才的诊断结果填写的，最强模型
-    model = genai.GenerativeModel("models/gemini-2.0-flash")
+    model = genai.GenerativeModel("models/gemini-1.5-flash")
     
     response = model.generate_content(prompt)
     return response.text
