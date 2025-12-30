@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
-from openai import OpenAI  # 换成了 OpenAI 库
+import requests  # 使用基础请求库，1:1 复刻 Curl
+import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -9,7 +10,7 @@ import time
 
 # --- 1. 配置读取 ---
 try:
-    # 这里的 GOOGLE_API_KEY 现在填你买的那个新 Key
+    # 这里填你买的中转 API Key
     API_KEY = st.secrets["GOOGLE_API_KEY"]
     GMAIL_USER = st.secrets["GMAIL_USER"]
     GMAIL_PASSWORD = st.secrets["GMAIL_PASSWORD"]
@@ -18,16 +19,10 @@ except Exception as e:
     st.error(f"请在 Streamlit 后台配置 Secrets 密钥！错误: {e}")
     st.stop()
 
-# --- 关键修改：初始化 OpenAI 客户端连接中转站 ---
-client = OpenAI(
-    api_key=API_KEY,
-    base_url="https://api.gptsapi.net/v1"  # 指向你买的服务商地址
-)
-
 # --- 2. 核心功能函数 ---
 
 def send_email(to_email, report_content):
-    """发送邮件功能 (保持不变)"""
+    """发送邮件功能"""
     msg = MIMEMultipart()
     msg['From'] = Header("小红书AI分析师", 'utf-8')
     msg['To'] = to_email
@@ -57,8 +52,51 @@ def send_email(to_email, report_content):
         print(f"邮件发送失败: {e}")
         return False
 
+def call_custom_api(prompt):
+    """
+    使用 requests 库直接模拟 Curl 命令调用中转接口
+    目标地址: https://api.gptsapi.net/v1beta/models/gemini-3-flash-preview:generateContent
+    """
+    url = "https://api.gptsapi.net/v1beta/models/gemini-3-flash-preview:generateContent"
+    
+    # 构造请求头 (Header)，对应 Curl 中的 -H
+    headers = {
+        "x-goog-api-key": API_KEY,  # 这里用 x-goog-api-key，对应 Curl 示例
+        "Content-Type": "application/json"
+    }
+    
+    # 构造请求体 (Body)，对应 Curl 中的 --data-raw
+    # 这是 Google 原生的格式，不是 OpenAI 的格式
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": prompt}
+                ]
+            }
+        ]
+    }
+    
+    try:
+        # 发送 POST 请求
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+        
+        # 检查是否成功
+        if response.status_code == 200:
+            result = response.json()
+            # 解析 Google 格式的返回结果
+            try:
+                return result['candidates'][0]['content']['parts'][0]['text']
+            except (KeyError, IndexError):
+                return f"解析失败，API 返回结构异常: {result}"
+        else:
+            return f"API 请求失败 (状态码 {response.status_code}): {response.text}"
+            
+    except Exception as e:
+        return f"网络请求出错: {e}"
+
 def analyze_data(df):
-    """调用中转 API 进行分析"""
+    """数据处理与 Prompt 构建"""
     data_str = df.head(50).to_string()
     
     prompt = f"""
@@ -72,29 +110,12 @@ def analyze_data(df):
     3. 3条改进建议
     """
     
-    # --- 这里的 model 名字要看卖家文档 ---
-    # 卖家说支持 "gemini3 flash preview"，通常对应的 ID 可能是 "gemini-2.0-flash-exp"
-    # 或者直接就是 "gemini-1.5-pro"。
-    # 如果报错找不到模型，请尝试改成 "gpt-4o" (有些商家会乱映射) 或者咨询商家准确的 model id
-    model_name = "gemini-2.0-flash-exp" 
-    
-    try:
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": "你是专业的数据分析师。"},
-                {"role": "user", "content": prompt}
-            ],
-            stream=False
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        return f"接口调用失败: {e}"
+    return call_custom_api(prompt)
 
 # --- 3. Streamlit 页面 UI ---
 
 st.set_page_config(page_title="小红书爆款挖掘机", page_icon="🚀")
-st.title("🚀 小红书账号深度诊断 AI (中转版)")
+st.title("🚀 小红书账号深度诊断 AI (Gemini 3 Preview)")
 
 with st.sidebar:
     st.header("🔐 身份验证")
@@ -114,10 +135,10 @@ if st.button("开始挖掘 🚀"):
             status_box.info("📊 读取数据中...")
             df = pd.read_csv(uploaded_file)
             
-            status_box.info("🧠 AI 正在通过中转接口分析...")
+            status_box.info("🧠 AI (Gemini 3 Flash) 正在分析...")
             report = analyze_data(df)
             
-            if "接口调用失败" in report:
+            if "API 请求失败" in report or "网络请求出错" in report:
                 status_box.error(report)
             else:
                 status_box.info("📧 发送邮件中...")
