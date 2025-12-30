@@ -1,0 +1,5 @@
+{
+  "name": "XHSAnalyzer1.0",
+  "description": "A high-end diagnostic tool for Xiaohongshu (Red Book) accounts. Upload CSV data to uncover persona positioning, growth inflection points, and viral patterns using Gemini AI.",
+  "requestFramePermissions": []
+}
