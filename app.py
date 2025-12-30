@@ -31,7 +31,7 @@ def send_email(to_email, report_content):
     msg['To'] = to_email
     msg['Subject'] = Header("【分析完成】您的账号诊断报告", 'utf-8')
     
-    # 简单的 HTML 包装，让邮件更好看
+    # 简单的 HTML 包装
     html_content = f"""
     <div style="font-family: sans-serif; padding: 20px; color: #333;">
         <h2 style="color: #FF2442;">📊 您的账号诊断报告已生成</h2>
@@ -46,7 +46,6 @@ def send_email(to_email, report_content):
     msg.attach(MIMEText(html_content, 'html', 'utf-8'))
     
     try:
-        # 连接 Gmail 服务器
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
         server.login(GMAIL_USER, GMAIL_PASSWORD)
@@ -58,8 +57,7 @@ def send_email(to_email, report_content):
         return False
 
 def analyze_data(df):
-    """调用 Gemini 2.0 进行分析"""
-    # 截取前 50 行数据，避免超出 Token 限制（虽然 2.0 窗口很大，但为了速度）
+    """调用 Gemini 进行分析"""
     data_str = df.head(50).to_string()
     
     prompt = f"""
@@ -77,9 +75,9 @@ def analyze_data(df):
     请语气专业、犀利，直接给出干货。
     """
     
-    # --- 关键修改：使用你列表里确认可用的 Gemini 2.0 模型 ---！
-# 而且它指向的是最新版 Flash，额度比 2.0 高，不容易 429。
-model = genai.GenerativeModel("models/gemini-flash-latest")
+    # --- 关键修正：使用你列表中存在的 models/gemini-flash-latest ---
+    # 这个模型指向最新 Flash，既在你的列表里（不会404），额度也够用（不会429）
+    model = genai.GenerativeModel("models/gemini-flash-latest")
     
     response = model.generate_content(prompt)
     return response.text
@@ -96,14 +94,11 @@ with st.sidebar:
     st.header("🔐 身份验证")
     input_code = st.text_input("请输入卡密 (CDK)", type="password", help="请联系管理员获取")
     user_email = st.text_input("接收报告的邮箱")
-    st.info("ℹ️ 系统使用 Gemini 2.0 模型驱动")
 
 # 主区域：文件上传
 uploaded_file = st.file_uploader("📂 请上传 CSV 数据表", type=['csv'])
 
-# 开始按钮逻辑
 if st.button("开始挖掘 (Start) 🚀"):
-    # 1. 基础检查
     if not uploaded_file:
         st.warning("⚠️ 请先上传 CSV 文件！")
     elif not input_code:
@@ -111,34 +106,26 @@ if st.button("开始挖掘 (Start) 🚀"):
     elif not user_email:
         st.warning("⚠️ 请输入接收邮箱！")
     else:
-        # 2. 卡密验证
         if input_code.strip() in VALID_CODES:
-            status_box = st.empty() # 占位符，用于显示动态状态
-            
+            status_box = st.empty()
             try:
-                # 第一步：读取数据
                 status_box.info("📊 正在读取数据...")
                 df = pd.read_csv(uploaded_file)
                 
-                # 第二步：AI 分析
-                status_box.info("🧠 AI (Gemini 2.0) 正在深度思考... (约需 10-20 秒)")
+                status_box.info("🧠 AI 正在深度思考... (约需 10-20 秒)")
                 report = analyze_data(df)
                 
-                # 第三步：发送邮件
                 status_box.info("📧 报告生成完毕，正在发送邮件...")
                 if send_email(user_email, report):
                     status_box.success(f"✅ 成功！深度诊断报告已发送至 {user_email}")
-                    st.balloons() # 放个烟花庆祝
-                    
-                    # 在网页上也展示一下预览
+                    st.balloons()
                     with st.expander("点击预览报告内容"):
                         st.markdown(report)
                 else:
-                    status_box.error("❌ 邮件发送失败，请检查邮箱地址是否正确，或联系管理员。")
+                    status_box.error("❌ 邮件发送失败，请检查邮箱地址是否正确。")
                     
             except Exception as e:
                 status_box.error(f"❌ 发生错误: {e}")
         else:
-            # 防暴力破解
             time.sleep(2)
-            st.error("❌ 卡密无效或已过期！")
+            st.error("❌ 卡密无效！")
